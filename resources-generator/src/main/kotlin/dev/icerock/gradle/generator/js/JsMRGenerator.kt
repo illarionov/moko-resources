@@ -230,10 +230,14 @@ class JsMRGenerator(
                 const output = {
                   path: require("os").tmpdir() + '/' + '_karma_webpack_' + Math.floor(Math.random() * 1000000),
                 }
-                
+
+                const optimization = {
+                  runtimeChunk: true
+                }
+
                 config.set(
                     {
-                        webpack: {... createWebpackConfig(), output},
+                        webpack: {... createWebpackConfig(), output, optimization},
                         files: config.files.concat([{
                                 pattern: $pattern,
                                 watched: false,
