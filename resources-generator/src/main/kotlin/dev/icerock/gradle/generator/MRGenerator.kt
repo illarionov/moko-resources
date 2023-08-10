@@ -19,7 +19,7 @@ import org.gradle.api.provider.Provider
 import java.io.File
 
 abstract class MRGenerator(
-    generatedDir: Provider<Directory>,
+    protected val generatedDir: Provider<Directory>,
     protected val sourceSet: SourceSet,
     protected val mrSettings: MRSettings,
     internal val generators: List<Generator>
