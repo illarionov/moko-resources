@@ -15,6 +15,7 @@ android {
 tasks.matching { it.name.startsWith("lint") }.configureEach { enabled = false }
 
 kotlin {
+    jvmToolchain(17)
     sourceSets {
         val commonMain by getting {
             dependencies {
