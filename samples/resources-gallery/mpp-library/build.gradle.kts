@@ -5,38 +5,24 @@
 plugins {
     id("com.android.library")
     id("org.jetbrains.kotlin.multiplatform")
-    id("org.jetbrains.kotlin.native.cocoapods")
     id("dev.icerock.mobile.multiplatform-resources")
 }
 
 allprojects {
     plugins.withId("org.jetbrains.kotlin.multiplatform") {
         kotlin {
+            jvmToolchain(11)
             android()
-            ios()
-            iosSimulatorArm64()
+            // ios()
+            // iosSimulatorArm64()
             jvm()
-            macosX64()
-            macosArm64()
+            // macosX64()
+            // macosArm64()
             js(IR) { browser() }
 
             explicitApi()
 
             sourceSets {
-                val iosMain by getting
-                val iosSimulatorArm64Main by getting {
-                    dependsOn(iosMain)
-                }
-
-                val macosMain by creating {
-                    dependsOn(commonMain.get())
-                }
-                val macosX64Main by getting {
-                    dependsOn(macosMain)
-                }
-                val macosArm64Main by getting {
-                    dependsOn(macosMain)
-                }
             }
         }
     }
@@ -49,20 +35,13 @@ android {
 
     lint.disable.add("ImpliedQuantity")
     lint.disable.add("MissingTranslation")
+    compileOptions {
+        sourceCompatibility = JavaVersion.VERSION_11
+        targetCompatibility = JavaVersion.VERSION_11
+    }
 }
 
 kotlin {
-    cocoapods {
-        version = "1.0"
-        summary = "Some description for a Kotlin/Native module"
-        homepage = "Link to a Kotlin/Native module homepage"
-
-        framework {
-            baseName = "MultiPlatformLibrary"
-
-            export(moko.resources)
-        }
-    }
 }
 
 dependencies {

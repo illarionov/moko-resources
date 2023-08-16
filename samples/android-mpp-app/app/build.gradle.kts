@@ -34,7 +34,7 @@ android {
 
 kotlin {
     android()
-    ios()
+    // ios()
 }
 
 dependencies {

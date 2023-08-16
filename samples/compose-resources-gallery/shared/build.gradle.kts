@@ -2,7 +2,6 @@ import org.jetbrains.kotlin.gradle.tasks.DummyFrameworkTask
 
 plugins {
     kotlin("multiplatform")
-    kotlin("native.cocoapods")
     id("com.android.library")
     id("org.jetbrains.compose")
     id("dev.icerock.mobile.multiplatform-resources")
@@ -15,28 +14,10 @@ kotlin {
 
     jvm("desktop")
 
-    ios()
-    iosSimulatorArm64()
-
     js(IR) {
         browser()
     }
 
-    macosArm64()
-    macosX64()
-
-    cocoapods {
-        summary = "Some description for the Shared Module"
-        homepage = "Link to the Shared Module homepage"
-        ios.deploymentTarget = "14.1"
-        podfile = project.file("../iosApp/Podfile")
-        framework {
-            baseName = "shared"
-            isStatic = true
-        }
-        // TODO move to gradle plugin
-        extraSpecAttributes["resource"] = "'build/cocoapods/framework/shared.framework/*.bundle'"
-    }
 
     @Suppress("UNUSED_VARIABLE")
     sourceSets {
@@ -56,10 +37,6 @@ kotlin {
                 api("androidx.core:core-ktx:1.10.0")
             }
         }
-        val iosMain by getting
-        val iosSimulatorArm64Main by getting {
-            dependsOn(iosMain)
-        }
         val desktopMain by getting {
             dependencies {
                 implementation(compose.desktop.common)
@@ -69,15 +46,6 @@ kotlin {
             dependencies {
                 implementation(compose.html.core)
             }
-        }
-        val macosMain by creating {
-            dependsOn(commonMain)
-        }
-        val macosX64Main by getting {
-            dependsOn(macosMain)
-        }
-        val macosArm64Main by getting {
-            dependsOn(macosMain)
         }
     }
 }

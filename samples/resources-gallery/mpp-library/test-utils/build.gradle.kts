@@ -9,12 +9,17 @@ plugins {
 
 android {
     namespace = "com.icerockdev.library.testutils"
+    compileOptions {
+        sourceCompatibility = JavaVersion.VERSION_11
+        targetCompatibility = JavaVersion.VERSION_11
+    }
 }
 
 // disable android lint for test utils (no need here)
 tasks.matching { it.name.startsWith("lint") }.configureEach { enabled = false }
 
 kotlin {
+    jvmToolchain(11)
     sourceSets {
         val commonMain by getting {
             dependencies {

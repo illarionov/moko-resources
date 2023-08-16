@@ -1,3 +1,6 @@
+import dev.icerock.gradle.tasks.GenerateMokoWebpackConfig
+import dev.icerock.gradle.tasks.MergeMokoJsResourcesTask
+
 plugins {
     kotlin("multiplatform")
     id("org.jetbrains.compose")
@@ -25,3 +28,7 @@ kotlin {
 multiplatformResources {
     multiplatformResourcesPackage = "com.icerockdev.app"
 }
+
+//tasks.withType<GenerateMokoWebpackConfig>().configureEach {
+//    enabled = false
+//}
