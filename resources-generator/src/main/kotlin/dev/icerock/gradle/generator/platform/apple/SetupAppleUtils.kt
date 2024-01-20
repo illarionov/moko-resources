@@ -4,7 +4,6 @@
 
 package dev.icerock.gradle.generator.platform.apple
 
-import com.android.build.gradle.internal.tasks.factory.dependsOn
 import dev.icerock.gradle.MultiplatformResourcesPluginExtension
 import dev.icerock.gradle.actions.apple.CopyAppleResourcesFromFrameworkToFatAction
 import dev.icerock.gradle.actions.apple.CopyResourcesFromKLibsToExecutableAction
@@ -77,8 +76,7 @@ internal fun createCopyFrameworkResourcesTask(framework: Framework) {
     val project: Project = framework.project
     val taskName: String = framework.linkTaskName.replace("link", "copyResources")
 
-    val copyTask: TaskProvider<CopyFrameworkResourcesToAppTask> =
-        project.tasks.register(taskName, CopyFrameworkResourcesToAppTask::class.java) {
+    project.tasks.register(taskName, CopyFrameworkResourcesToAppTask::class.java) {
             it.inputFrameworkDirectory.set(framework.outputDirectoryProperty)
             it.outputDirectory.set(
                 project.provider {
@@ -93,8 +91,8 @@ internal fun createCopyFrameworkResourcesTask(framework: Framework) {
                     project.layout.projectDirectory.dir(targetDir.relativeTo(baseDir).path)
                 }
             )
+            it.dependsOn(framework.linkTaskProvider)
         }
-    copyTask.dependsOn(framework.linkTaskProvider)
 
 // FIXME Вынести в отдельную таску, должно создаваться один раз
 //    val xcodeTask = project.tasks.maybeCreate(

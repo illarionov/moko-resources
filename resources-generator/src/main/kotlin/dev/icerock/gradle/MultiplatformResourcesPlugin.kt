@@ -4,10 +4,14 @@
 
 package dev.icerock.gradle
 
-import com.android.build.api.dsl.AndroidSourceSet
-import com.android.build.gradle.api.BaseVariant
-import com.android.build.gradle.internal.lint.AndroidLintAnalysisTask
+import com.android.build.api.dsl.CommonExtension
+import com.android.build.api.variant.AndroidComponentsExtension
+import com.android.build.api.variant.HasAndroidTest
+import com.android.build.api.variant.HasUnitTest
+import com.android.build.api.variant.Sources
+import com.android.build.api.variant.Variant
 import dev.icerock.gradle.extra.getOrRegisterGenerateResourcesTask
+import dev.icerock.gradle.extra.getOrRegisterGenerateTask
 import dev.icerock.gradle.generator.platform.apple.setupAppleKLibResources
 import dev.icerock.gradle.generator.platform.apple.setupCopyXCFrameworkResourcesTask
 import dev.icerock.gradle.generator.platform.apple.setupExecutableResources
@@ -17,6 +21,7 @@ import dev.icerock.gradle.generator.platform.apple.setupTestsResources
 import dev.icerock.gradle.generator.platform.js.setupJsKLibResources
 import dev.icerock.gradle.generator.platform.js.setupJsResources
 import dev.icerock.gradle.tasks.GenerateMultiplatformResourcesTask
+import dev.icerock.gradle.utils.capitalize
 import dev.icerock.gradle.utils.kotlinSourceSetsObservable
 import org.gradle.api.GradleException
 import org.gradle.api.Plugin
@@ -34,9 +39,8 @@ import org.jetbrains.kotlin.gradle.plugin.KotlinPlatformType
 import org.jetbrains.kotlin.gradle.plugin.KotlinSourceSet
 import org.jetbrains.kotlin.gradle.plugin.KotlinTarget
 import org.jetbrains.kotlin.gradle.plugin.mpp.KotlinAndroidTarget
-import org.jetbrains.kotlin.gradle.plugin.mpp.KotlinJvmAndroidCompilation
 import org.jetbrains.kotlin.gradle.plugin.mpp.KotlinNativeTarget
-import org.jetbrains.kotlin.gradle.plugin.sources.android.findAndroidSourceSet
+import org.jetbrains.kotlin.gradle.plugin.sources.android.androidSourceSetInfoOrNull
 import org.jetbrains.kotlin.gradle.tasks.Kotlin2JsCompile
 import org.jetbrains.kotlin.gradle.tasks.KotlinCompilationTask
 import org.jetbrains.kotlin.gradle.tasks.KotlinNativeCompile
@@ -48,6 +52,15 @@ open class MultiplatformResourcesPlugin : Plugin<Project> {
             name = "multiplatformResources",
             type = MultiplatformResourcesPluginExtension::class
         ).apply { setupConvention(project) }
+
+        listOf(
+            "com.android.application",
+            "com.android.library"
+        ).forEach {
+            project.plugins.withId(it) {
+                configureAndroidPlugin(project, mrExtension)
+            }
+        }
 
         project.plugins.withType(KotlinMultiplatformPluginWrapper::class) {
             val kmpExtension: KotlinMultiplatformExtension = project.extensions.getByType()
@@ -83,8 +96,7 @@ open class MultiplatformResourcesPlugin : Plugin<Project> {
 
             target.compilations.configureEach { compilation ->
                 compilation.kotlinSourceSetsObservable.forAll { sourceSet: KotlinSourceSet ->
-                    val genTaskProvider: TaskProvider<GenerateMultiplatformResourcesTask> =
-                        sourceSet.getOrRegisterGenerateResourcesTask(mrExtension)
+                    val genTaskProvider = sourceSet.getOrRegisterGenerateResourcesTask(mrExtension)
 
                     genTaskProvider.configure {
                         it.platformType.set(target.platformType.name)
@@ -107,7 +119,6 @@ open class MultiplatformResourcesPlugin : Plugin<Project> {
                         target = target,
                         sourceSet = sourceSet,
                         genTaskProvider = genTaskProvider,
-                        compilation = compilation
                     )
 
                     compilation.compileTaskProvider.configure { compileTask: KotlinCompilationTask<*> ->
@@ -184,23 +195,71 @@ open class MultiplatformResourcesPlugin : Plugin<Project> {
                 sourceSet.resources.srcDir(genTaskProvider.map { it.outputAssetsDir })
             }
 
-            KotlinPlatformType.androidJvm -> {
-                target as KotlinAndroidTarget
-                compilation as KotlinJvmAndroidCompilation
-
-                val androidSourceSet: AndroidSourceSet = project.findAndroidSourceSet(sourceSet)
-                    ?: throw GradleException("can't find android source set for $sourceSet")
-
-                @Suppress("UnstableApiUsage")
-                androidSourceSet.kotlin.srcDir(genTaskProvider.map { it.outputSourcesDir })
-                @Suppress("UnstableApiUsage")
-                androidSourceSet.res.srcDir(genTaskProvider.map { it.outputResourcesDir })
-                @Suppress("UnstableApiUsage")
-                androidSourceSet.assets.srcDir(genTaskProvider.map { it.outputAssetsDir })
-            }
-
+            KotlinPlatformType.androidJvm -> Unit
             KotlinPlatformType.common, KotlinPlatformType.native, KotlinPlatformType.wasm -> Unit
         }
+    }
+
+    private fun configureAndroidPlugin(
+        project: Project,
+        mrExtension: MultiplatformResourcesPluginExtension,
+    ) {
+        project.extensions.configure(CommonExtension::class.java) {
+            val androidComponents = project.extensions.getByType(AndroidComponentsExtension::class.java)
+            androidComponents.onVariants { variant: Variant ->
+                val mainGenTaskProvider = getOrRegisterGenerateTask(
+                    kotlinSourceSetName = "androidMain",
+                    project = project,
+                    mrExtension = mrExtension,
+                    setupOutputDirs = false
+                )
+                variant.sources.addTaskAsSource(mainGenTaskProvider)
+
+                val variantGenTaskProvider = getOrRegisterGenerateTask(
+                    kotlinSourceSetName = "android" + variant.name.capitalize(),
+                    project = project,
+                    mrExtension = mrExtension,
+                    setupOutputDirs = false
+                )
+                variant.sources.addTaskAsSource(variantGenTaskProvider)
+
+                (variant as? HasUnitTest)?.unitTest?.let { unitTestComponent ->
+                    val variantGenTestTaskProvider = getOrRegisterGenerateTask(
+                        kotlinSourceSetName = "androidUnitTest" + variant.name.capitalize(),
+                        project = project,
+                        mrExtension = mrExtension,
+                        setupOutputDirs = false
+                    )
+                    unitTestComponent.sources.addTaskAsSource(variantGenTestTaskProvider)
+                }
+                (variant as? HasAndroidTest)?.androidTest?.let { androidTestComponent ->
+                    val variantGenTestTaskProvider = getOrRegisterGenerateTask(
+                        kotlinSourceSetName = "androidInstrumentedTest" + variant.name.capitalize(),
+                        project = project,
+                        mrExtension = mrExtension,
+                        setupOutputDirs = false
+                    )
+                    androidTestComponent.sources.addTaskAsSource(variantGenTestTaskProvider)
+                }
+            }
+        }
+    }
+
+    private fun Sources.addTaskAsSource(
+        taskProvider: TaskProvider<GenerateMultiplatformResourcesTask>,
+    ) {
+        assets?.addGeneratedSourceDirectory(
+            taskProvider,
+            GenerateMultiplatformResourcesTask::outputAssetsDir
+        )
+        res?.addGeneratedSourceDirectory(
+            taskProvider,
+            GenerateMultiplatformResourcesTask::outputResourcesDir
+        )
+        java?.addGeneratedSourceDirectory(
+            taskProvider,
+            GenerateMultiplatformResourcesTask::outputSourcesDir
+        )
     }
 
     @OptIn(ExperimentalKotlinGradlePluginApi::class)
@@ -208,29 +267,13 @@ open class MultiplatformResourcesPlugin : Plugin<Project> {
         target: KotlinTarget,
         sourceSet: KotlinSourceSet,
         genTaskProvider: TaskProvider<GenerateMultiplatformResourcesTask>,
-        compilation: KotlinCompilation<*>,
     ) {
         if (target !is KotlinAndroidTarget) return
 
-        compilation as KotlinJvmAndroidCompilation
-
-        val project: Project = target.project
-
-        val androidSourceSet: AndroidSourceSet = project.findAndroidSourceSet(sourceSet)
-            ?: throw GradleException("can't find android source set for $sourceSet")
+        val androidSourceSetName = sourceSet.androidSourceSetInfoOrNull?.androidSourceSetName
+            ?: throw GradleException("can't find android source set name for $sourceSet")
 
         // save android sourceSet name to skip build type specific tasks
-        @Suppress("UnstableApiUsage")
-        genTaskProvider.configure { it.androidSourceSetName.set(androidSourceSet.name) }
-
-        // connect generateMR task with android preBuild
-        @Suppress("DEPRECATION")
-        val androidVariant: BaseVariant = compilation.androidVariant
-        androidVariant.preBuildProvider.configure { it.dependsOn(genTaskProvider) }
-
-        // TODO this way do more than required - we trigger generate all android related resources at all
-        project.tasks.withType<AndroidLintAnalysisTask>().configureEach {
-            it.dependsOn(genTaskProvider)
-        }
+        genTaskProvider.configure { it.androidSourceSetName.set(androidSourceSetName) }
     }
 }

@@ -12,8 +12,10 @@ import dev.icerock.gradle.utils.dependsOnObservable
 import dev.icerock.gradle.utils.getAndroidRClassPackage
 import dev.icerock.gradle.utils.isStrictLineBreaks
 import org.gradle.api.Project
+import org.gradle.api.UnknownTaskException
 import org.gradle.api.file.SourceDirectorySet
 import org.gradle.api.tasks.TaskProvider
+import org.gradle.kotlin.dsl.named
 import org.jetbrains.kotlin.gradle.plugin.KotlinPlatformType
 import org.jetbrains.kotlin.gradle.plugin.KotlinSourceSet
 import org.jetbrains.kotlin.tooling.core.extrasKeyOf
@@ -27,16 +29,23 @@ internal fun KotlinSourceSet.getOrRegisterGenerateResourcesTask(
 ): TaskProvider<GenerateMultiplatformResourcesTask> {
     val currentProvider: TaskProvider<GenerateMultiplatformResourcesTask>? =
         this.extras[mokoResourcesGenTaskKey()]
-    if (currentProvider != null) return currentProvider
-
     val resourcesSourceDirectory: SourceDirectorySet = getOrCreateResourcesSourceDirectory()
 
-    val genTask: TaskProvider<GenerateMultiplatformResourcesTask> = registerGenerateTask(
-        kotlinSourceSet = this,
+    if (currentProvider != null) {
+        currentProvider.configure {
+            it.ownResources.setFrom(resourcesSourceDirectory.sourceDirectories)
+        }
+        return currentProvider
+    }
+
+    val genTask: TaskProvider<GenerateMultiplatformResourcesTask> = getOrRegisterGenerateTask(
+        kotlinSourceSetName = this.name,
         project = project,
-        resourcesSourceDirectory = resourcesSourceDirectory,
         mrExtension = mrExtension
     )
+    genTask.configure {
+        it.ownResources.setFrom(resourcesSourceDirectory.sourceDirectories)
+    }
 
     configureLowerDependencies(
         kotlinSourceSet = this,
@@ -61,13 +70,27 @@ internal fun KotlinSourceSet.getOrRegisterGenerateResourcesTask(
     return genTask
 }
 
-private fun registerGenerateTask(
-    kotlinSourceSet: KotlinSourceSet,
+internal fun getOrRegisterGenerateTask(
+    kotlinSourceSetName: String,
     project: Project,
-    resourcesSourceDirectory: SourceDirectorySet,
     mrExtension: MultiplatformResourcesPluginExtension,
+    setupOutputDirs: Boolean = true,
 ): TaskProvider<GenerateMultiplatformResourcesTask> {
-    val generateTaskName: String = "generateMR" + kotlinSourceSet.name
+    val generateTaskName = getGenerateTaskName(kotlinSourceSetName)
+    return try {
+        project.tasks.named<GenerateMultiplatformResourcesTask>(generateTaskName)
+    } catch (@Suppress("SwallowedException") ex: UnknownTaskException) {
+        registerGenerateTask(kotlinSourceSetName, project, mrExtension, setupOutputDirs)
+    }
+}
+
+private fun registerGenerateTask(
+    kotlinSourceSetName: String,
+    project: Project,
+    mrExtension: MultiplatformResourcesPluginExtension,
+    setupOutputDirs: Boolean = true,
+): TaskProvider<GenerateMultiplatformResourcesTask> {
+    val generateTaskName = getGenerateTaskName(kotlinSourceSetName)
     val generatedMokoResourcesDir = File(
         project.layout.buildDirectory.get().asFile,
         "generated/moko-resources"
@@ -77,10 +100,7 @@ private fun registerGenerateTask(
         generateTaskName,
         GenerateMultiplatformResourcesTask::class.java
     ) { generateTask ->
-        generateTask.sourceSetName.set(kotlinSourceSet.name)
-
-        val files: Set<File> = resourcesSourceDirectory.srcDirs
-        generateTask.ownResources.setFrom(files)
+        generateTask.sourceSetName.set(kotlinSourceSetName)
 
         generateTask.iosBaseLocalizationRegion.set(mrExtension.iosBaseLocalizationRegion)
         generateTask.resourcesClassName.set(mrExtension.resourcesClassName)
@@ -91,13 +111,15 @@ private fun registerGenerateTask(
         generateTask.outputMetadataFile.set(
             File(
                 File(generatedMokoResourcesDir, "metadata"),
-                "${kotlinSourceSet.name}-metadata.json"
+                "${kotlinSourceSetName}-metadata.json"
             )
         )
-        val sourceSetResourceDir = File(generatedMokoResourcesDir, kotlinSourceSet.name)
-        generateTask.outputAssetsDir.set(File(sourceSetResourceDir, "assets"))
-        generateTask.outputResourcesDir.set(File(sourceSetResourceDir, "res"))
-        generateTask.outputSourcesDir.set(File(sourceSetResourceDir, "src"))
+        if (setupOutputDirs) {
+            val sourceSetResourceDir = File(generatedMokoResourcesDir, kotlinSourceSetName)
+            generateTask.outputAssetsDir.set(File(sourceSetResourceDir, "assets"))
+            generateTask.outputResourcesDir.set(File(sourceSetResourceDir, "res"))
+            generateTask.outputSourcesDir.set(File(sourceSetResourceDir, "src"))
+        }
 
         // by default source set will be common
         generateTask.platformType.set(KotlinPlatformType.common.name)
@@ -115,6 +137,8 @@ private fun registerGenerateTask(
 
     return taskProvider
 }
+
+private fun getGenerateTaskName(kotlinSourceSetName: String): String = "generateMR$kotlinSourceSetName"
 
 private fun configureLowerDependencies(
     kotlinSourceSet: KotlinSourceSet,
